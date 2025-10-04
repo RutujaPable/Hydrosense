@@ -321,4 +321,4 @@ def add_community_project():
 # --- END NEW SECTION ---
 if __name__ == '__main__':
     logger.info("Starting Roof Detection Backend Server...")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', {process.env.REACT_APP_API_URL}, debug=True)
