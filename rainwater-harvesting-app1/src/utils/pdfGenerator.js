@@ -1,0 +1,159 @@
+
+import jsPDF from 'jspdf';
+
+export const generateDetailedReport = (appData) => {
+  const pdf = new jsPDF();
+  const pageWidth = pdf.internal.pageSize.width;
+  const margin = 20;
+  let yPosition = 30;
+
+  // Header
+  pdf.setFillColor(59, 130, 246);
+  pdf.rect(0, 0, pageWidth, 40, 'F');
+  
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFontSize(24);
+  pdf.setFont(undefined, 'bold');
+  pdf.text('Rainwater Harvesting Assessment Report', margin, 25);
+  
+  pdf.setFontSize(12);
+  pdf.text(`Generated: ${new Date().toLocaleDateString()}`, margin, 35);
+
+  pdf.setTextColor(0, 0, 0);
+  yPosition = 60;
+
+  // Executive Summary
+  pdf.setFontSize(16);
+  pdf.setFont(undefined, 'bold');
+  pdf.text('EXECUTIVE SUMMARY', margin, yPosition);
+  yPosition += 15;
+
+  pdf.setFontSize(11);
+  pdf.setFont(undefined, 'normal');
+  const summary = `This assessment analyzes the rainwater harvesting potential for a ${appData.roofArea}m² property. Based on local environmental conditions, the recommended ${appData.selectedStructure?.name || 'structure'} can harvest approximately ${appData.harvestPotential?.annualPotential || 0} liters annually, with an estimated payback period of ${appData.costAnalysis?.paybackPeriod || 'N/A'} years.`;
+  
+  const summaryLines = pdf.splitTextToSize(summary, pageWidth - 2 * margin);
+  pdf.text(summaryLines, margin, yPosition);
+  yPosition += summaryLines.length * 6 + 15;
+
+  // Property Details
+  pdf.setFontSize(14);
+  pdf.setFont(undefined, 'bold');
+  pdf.text('PROPERTY DETAILS', margin, yPosition);
+  yPosition += 12;
+
+  const propertyDetails = [
+    `Location: ${appData.location?.address || 'Not specified'}`,
+    `Roof Area: ${appData.roofArea} m²`,
+    `Family Size: ${appData.familySize} members`,
+    `Property Type: ${appData.propertyType || 'Not specified'}`,
+    `Available Space: ${appData.availableSpace || 'Not specified'}`
+  ];
+
+  pdf.setFontSize(11);
+  pdf.setFont(undefined, 'normal');
+  propertyDetails.forEach(detail => {
+    pdf.text(detail, margin, yPosition);
+    yPosition += 8;
+  });
+  yPosition += 10;
+
+  // Environmental Analysis
+  pdf.setFontSize(14);
+  pdf.setFont(undefined, 'bold');
+  pdf.text('ENVIRONMENTAL ANALYSIS', margin, yPosition);
+  yPosition += 12;
+
+  if (appData.rainfallData) {
+    const envData = [
+      `Annual Rainfall: ${Math.round(appData.rainfallData.annualAverage)} mm`,
+      `Rainy Days: ${Math.round(appData.rainfallData.rainyDays)} days/year`,
+      `Rainfall Reliability: ${Math.round(appData.rainfallData.reliability * 100)}%`,
+      `Monsoon Pattern: ${appData.rainfallData.intensity || 'Moderate'}`
+    ];
+
+    pdf.setFontSize(11);
+    envData.forEach(data => {
+      pdf.text(data, margin, yPosition);
+      yPosition += 8;
+    });
+  }
+
+  if (appData.groundwaterData) {
+    const groundwaterInfo = [
+      `Groundwater Depth: ${Math.round(appData.groundwaterData.depthToWater)} meters`,
+      `Aquifer Type: ${appData.groundwaterData.aquiferType}`,
+      `Soil Type: ${appData.groundwaterData.soilType}`,
+      `Permeability: ${appData.groundwaterData.permeability}`
+    ];
+
+    groundwaterInfo.forEach(info => {
+      pdf.text(info, margin, yPosition);
+      yPosition += 8;
+    });
+  }
+  yPosition += 10;
+
+  // Check for new page
+  if (yPosition > 240) {
+    pdf.addPage();
+    yPosition = 30;
+  }
+
+  // Recommended Solution
+  pdf.setFontSize(14);
+  pdf.setFont(undefined, 'bold');
+  pdf.text('RECOMMENDED SOLUTION', margin, yPosition);
+  yPosition += 12;
+
+  if (appData.selectedStructure) {
+    const structureInfo = [
+      `Structure Type: ${appData.selectedStructure.name}`,
+      `Dimensions: ${appData.selectedStructure.dimensions}`,
+      `Efficiency: ${appData.selectedStructure.efficiency}`,
+      `Maintenance: ${appData.selectedStructure.maintenance}`,
+      `Estimated Cost: ${appData.selectedStructure.cost}`
+    ];
+
+    pdf.setFontSize(11);
+    structureInfo.forEach(info => {
+      pdf.text(info, margin, yPosition);
+      yPosition += 8;
+    });
+  }
+  yPosition += 10;
+
+  // Financial Analysis
+  if (appData.costAnalysis) {
+    pdf.setFontSize(14);
+    pdf.setFont(undefined, 'bold');
+    pdf.text('FINANCIAL ANALYSIS', margin, yPosition);
+    yPosition += 12;
+
+    const financialData = [
+      `Initial Investment: ₹${appData.costAnalysis.initialCost?.toLocaleString()}`,
+      `Annual Water Savings: ₹${Math.round(appData.costAnalysis.annualSavings)?.toLocaleString()}`,
+      `Net Annual Benefit: ₹${Math.round(appData.costAnalysis.netAnnualSavings)?.toLocaleString()}`,
+      `Payback Period: ${appData.costAnalysis.paybackPeriod} years`,
+      `20-Year Net Benefit: ₹${Math.round(appData.costAnalysis.twentyYearSavings / 1000)}K`
+    ];
+
+    pdf.setFontSize(11);
+    financialData.forEach(data => {
+      pdf.text(data, margin, yPosition);
+      yPosition += 8;
+    });
+  }
+
+  // Footer
+  pdf.setFillColor(240, 240, 240);
+  pdf.rect(0, pdf.internal.pageSize.height - 30, pageWidth, 30, 'F');
+  
+  pdf.setTextColor(100, 100, 100);
+  pdf.setFontSize(10);
+  pdf.text('Generated by HydroSense - Smart Rainwater Harvesting Platform', margin, pdf.internal.pageSize.height - 15);
+  
+  return pdf;
+};
+
+
