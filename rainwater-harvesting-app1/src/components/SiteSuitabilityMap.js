@@ -1,6 +1,5 @@
-
 import React, { useState, useContext, useEffect } from 'react';
-import { MapContainer, TileLayer, GeoJSON, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, GeoJSON, Marker, Popup, useMap } from 'react-leaflet';
 import { motion } from 'framer-motion';
 import { AppContext } from '../App';
 import L from 'leaflet';
@@ -14,6 +13,17 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 });
 
+// Component to handle map centering
+function MapCenter({ center }) {
+  const map = useMap();
+  useEffect(() => {
+    if (center) {
+      map.setView(center, 15);
+    }
+  }, [center, map]);
+  return null;
+}
+
 const SiteSuitabilityMap = () => {
   const { appData, nextStep } = useContext(AppContext);
   const [gridData, setGridData] = useState(null);
@@ -21,7 +31,7 @@ const SiteSuitabilityMap = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!appData.location) {
+    if (!appData.location || !appData.location.coordinates) {
       setError('Location not found. Please go back and set your location.');
       setLoading(false);
       return;
@@ -30,6 +40,10 @@ const SiteSuitabilityMap = () => {
     const fetchSuitabilityGrid = async () => {
       try {
         const apiUrl = process.env.REACT_APP_API_URL;
+        if (!apiUrl) {
+          throw new Error('API URL not configured');
+        }
+
         const response = await fetch(`${apiUrl}/get_suitability_grid`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -38,14 +52,22 @@ const SiteSuitabilityMap = () => {
             lng: appData.location.coordinates.lng,
           }),
         });
+
         if (!response.ok) {
-          throw new Error('Failed to fetch suitability data from the server.');
+          throw new Error(`Server error: ${response.status}`);
         }
+
         const data = await response.json();
+        
+        // Validate GeoJSON structure
+        if (!data || !data.type || data.type !== 'FeatureCollection' || !Array.isArray(data.features)) {
+          throw new Error('Invalid GeoJSON format received from server');
+        }
+
         setGridData(data);
       } catch (err) {
-        setError('Could not load suitability map. Please try again later.');
-        console.error(err);
+        console.error('Suitability map error:', err);
+        setError(`Could not load suitability map: ${err.message}`);
       } finally {
         setLoading(false);
       }
@@ -55,11 +77,11 @@ const SiteSuitabilityMap = () => {
   }, [appData.location]);
   
   const getColor = (score) => {
-    if (score > 8) return '#2ca25f'; // High (Green)
+    if (score > 8) return '#2ca25f';
     if (score > 6) return '#7fc97f';
-    if (score > 4) return '#fed976'; // Medium (Yellow)
+    if (score > 4) return '#fed976';
     if (score > 2) return '#feb24c';
-    return '#f03b20'; // Low (Red)
+    return '#f03b20';
   };
 
   const styleFeature = (feature) => ({
@@ -70,22 +92,53 @@ const SiteSuitabilityMap = () => {
     fillOpacity: 0.6,
   });
 
+  const onEachFeature = (feature, layer) => {
+    if (feature.properties) {
+      const props = feature.properties;
+      layer.bindPopup(`
+        <div style="font-size: 12px;">
+          <strong>Suitability Score:</strong> ${props.suitability_score}<br/>
+          <strong>Rainfall:</strong> ${Math.round(props.rainfall)} mm<br/>
+          <strong>Groundwater Depth:</strong> ${Math.round(props.groundwater_depth)} m<br/>
+          <strong>Permeability:</strong> ${props.permeability.toFixed(1)}
+        </div>
+      `);
+    }
+  };
+
   if (loading) {
     return (
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-        <p className="text-gray-600 mt-4">Generating regional suitability map...</p>
+      <div className="max-w-6xl mx-auto">
+        <div className="bg-white rounded-xl shadow-lg p-8">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Generating regional suitability map...</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-center bg-red-50 p-6 rounded-lg">
-        <p className="text-red-700 font-semibold">{error}</p>
+      <div className="max-w-6xl mx-auto">
+        <div className="bg-white rounded-xl shadow-lg p-8">
+          <div className="text-center bg-red-50 p-6 rounded-lg">
+            <p className="text-red-700 font-semibold mb-4">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
+
+  const userLocation = appData.location.coordinates;
+  const mapCenter = [userLocation.lat, userLocation.lng];
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -108,9 +161,9 @@ const SiteSuitabilityMap = () => {
           </p>
         </div>
 
-        <div className="relative bg-gray-100 rounded-lg p-4">
+        <div className="relative bg-gray-100 rounded-lg p-4 mb-6">
           <MapContainer
-            center={[appData.location.coordinates.lat, appData.location.coordinates.lng]}
+            center={mapCenter}
             zoom={15}
             scrollWheelZoom={true}
             className="rounded-lg"
@@ -120,30 +173,80 @@ const SiteSuitabilityMap = () => {
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
-            {gridData && <GeoJSON data={gridData} style={styleFeature} />}
-            <Marker position={[appData.location.coordinates.lat, appData.location.coordinates.lng]}>
-              <Popup>Your Location</Popup>
+            <MapCenter center={mapCenter} />
+            
+            {gridData && (
+              <GeoJSON 
+                data={gridData} 
+                style={styleFeature}
+                onEachFeature={onEachFeature}
+              />
+            )}
+            
+            <Marker position={mapCenter}>
+              <Popup>
+                <div style={{ textAlign: 'center' }}>
+                  <strong>Your Location</strong><br/>
+                  {appData.location.address}
+                </div>
+              </Popup>
             </Marker>
           </MapContainer>
           
           {/* Legend */}
-          <div className="absolute bottom-4 right-4 bg-white bg-opacity-80 p-3 rounded-lg shadow-md z-[1000]">
-              <h4 className="font-bold text-sm mb-2">Suitability</h4>
-              <div className="flex items-center mb-1"><div className="w-4 h-4 mr-2" style={{backgroundColor: '#2ca25f'}}></div><span className="text-xs">High</span></div>
-              <div className="flex items-center mb-1"><div className="w-4 h-4 mr-2" style={{backgroundColor: '#fed976'}}></div><span className="text-xs">Medium</span></div>
-              <div className="flex items-center"><div className="w-4 h-4 mr-2" style={{backgroundColor: '#f03b20'}}></div><span className="text-xs">Low</span></div>
+          <div className="absolute bottom-8 right-8 bg-white bg-opacity-90 p-4 rounded-lg shadow-lg z-[1000]">
+            <h4 className="font-bold text-sm mb-3">Suitability Score</h4>
+            <div className="space-y-2">
+              <div className="flex items-center">
+                <div className="w-6 h-4 mr-2" style={{backgroundColor: '#2ca25f'}}></div>
+                <span className="text-xs">High (8-10)</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-6 h-4 mr-2" style={{backgroundColor: '#7fc97f'}}></div>
+                <span className="text-xs">Good (6-8)</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-6 h-4 mr-2" style={{backgroundColor: '#fed976'}}></div>
+                <span className="text-xs">Medium (4-6)</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-6 h-4 mr-2" style={{backgroundColor: '#feb24c'}}></div>
+                <span className="text-xs">Fair (2-4)</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-6 h-4 mr-2" style={{backgroundColor: '#f03b20'}}></div>
+                <span className="text-xs">Low (0-2)</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="text-center mt-8">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={nextStep}
-              className="bg-green-600 text-white py-3 px-8 rounded-lg font-semibold text-lg hover:bg-green-700 transition-colors"
-            >
-              Continue to Roof Details →
-            </motion.button>
+        {/* Location Info */}
+        <div className="bg-blue-50 rounded-lg p-4 mb-6">
+          <h3 className="font-semibold text-blue-900 mb-2">Your Location Details</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-blue-700">Address:</span>
+              <div className="font-medium text-gray-800">{appData.location.address}</div>
+            </div>
+            <div>
+              <span className="text-blue-700">Coordinates:</span>
+              <div className="font-medium text-gray-800">
+                {userLocation.lat.toFixed(6)}, {userLocation.lng.toFixed(6)}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="text-center">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={nextStep}
+            className="bg-green-600 text-white py-3 px-8 rounded-lg font-semibold text-lg hover:bg-green-700 transition-colors shadow-lg"
+          >
+            Continue to Roof Details →
+          </motion.button>
         </div>
       </motion.div>
     </div>
@@ -151,4 +254,3 @@ const SiteSuitabilityMap = () => {
 };
 
 export default SiteSuitabilityMap;
-

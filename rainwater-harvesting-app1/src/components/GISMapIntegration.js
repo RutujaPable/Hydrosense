@@ -1,6 +1,5 @@
-
 import React, { useState, useContext, useRef, useEffect } from 'react';
-import { MapContainer, TileLayer, Polygon, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Polygon, useMapEvents, useMap } from 'react-leaflet';
 import { motion } from 'framer-motion';
 import { AppContext } from '../App';
 import L from 'leaflet';
@@ -13,6 +12,17 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 });
+
+// Component to center map on location
+function MapCenter({ center }) {
+  const map = useMap();
+  useEffect(() => {
+    if (center) {
+      map.setView(center, 19);
+    }
+  }, [center, map]);
+  return null;
+}
 
 const DraggablePolygon = ({ positions, setPositions }) => {
   const [dragging, setDragging] = useState(null);
@@ -31,9 +41,7 @@ const DraggablePolygon = ({ positions, setPositions }) => {
     }
   });
 
-  // Update markers when positions change
   useEffect(() => {
-    // Clear existing markers
     markersRef.current.forEach(marker => {
       if (map.hasLayer(marker)) {
         map.removeLayer(marker);
@@ -41,7 +49,6 @@ const DraggablePolygon = ({ positions, setPositions }) => {
     });
     markersRef.current = [];
 
-    // Add new markers
     positions.forEach((position, index) => {
       const marker = L.circleMarker(position, {
         radius: 8,
@@ -61,7 +68,6 @@ const DraggablePolygon = ({ positions, setPositions }) => {
       markersRef.current.push(marker);
     });
 
-    // Cleanup function
     return () => {
       markersRef.current.forEach(marker => {
         if (map.hasLayer(marker)) {
@@ -88,30 +94,26 @@ const GISMapIntegration = () => {
   const { appData, updateAppData, nextStep } = useContext(AppContext);
   const [roofBoundary, setRoofBoundary] = useState([]);
   const [calculatedArea, setCalculatedArea] = useState(0);
-  const mapRef = useRef();
 
-  // Initialize roof boundary based on location and estimated area
   useEffect(() => {
-    if (appData.location && appData.roofArea && !roofBoundary.length) {
+    if (appData.location && appData.location.coordinates && appData.roofArea && !roofBoundary.length) {
       const { lat, lng } = appData.location.coordinates;
       const areaInSqM = appData.roofArea;
       
-      // Calculate approximate dimensions (assuming rectangular roof)
       const sideLength = Math.sqrt(areaInSqM);
-      const offset = (sideLength / 111000); // Convert meters to degrees (approximate)
+      const offset = (sideLength / 111000);
       
       const initialBoundary = [
-        [lat + offset/2, lng - offset/2], // Top-left
-        [lat + offset/2, lng + offset/2], // Top-right
-        [lat - offset/2, lng + offset/2], // Bottom-right
-        [lat - offset/2, lng - offset/2]  // Bottom-left
+        [lat + offset/2, lng - offset/2],
+        [lat + offset/2, lng + offset/2],
+        [lat - offset/2, lng + offset/2],
+        [lat - offset/2, lng - offset/2]
       ];
       
       setRoofBoundary(initialBoundary);
     }
   }, [appData.location, appData.roofArea, roofBoundary.length]);
 
-  // Calculate area when boundary changes
   useEffect(() => {
     if (roofBoundary.length > 2) {
       const area = calculatePolygonArea(roofBoundary);
@@ -122,7 +124,6 @@ const GISMapIntegration = () => {
   const calculatePolygonArea = (coordinates) => {
     if (coordinates.length < 3) return 0;
     
-    // Using the shoelace formula
     let area = 0;
     for (let i = 0; i < coordinates.length; i++) {
       const j = (i + 1) % coordinates.length;
@@ -131,7 +132,6 @@ const GISMapIntegration = () => {
     }
     area = Math.abs(area) / 2;
     
-    // Convert from square degrees to square meters (approximate)
     const metersPerDegree = 111000;
     return area * metersPerDegree * metersPerDegree;
   };
@@ -140,14 +140,14 @@ const GISMapIntegration = () => {
     if (roofBoundary.length > 2) {
       updateAppData({
         roofBoundary,
-        roofArea: Math.round(calculatedArea) // Update with measured area
+        roofArea: Math.round(calculatedArea)
       });
       nextStep();
     }
   };
 
   const resetBoundary = () => {
-    if (appData.location && appData.roofArea) {
+    if (appData.location && appData.location.coordinates && appData.roofArea) {
       const { lat, lng } = appData.location.coordinates;
       const areaInSqM = appData.roofArea;
       const sideLength = Math.sqrt(areaInSqM);
@@ -164,13 +164,25 @@ const GISMapIntegration = () => {
     }
   };
 
-  if (!appData.location) {
+  if (!appData.location || !appData.location.coordinates) {
     return (
-      <div className="text-center py-12">
-        <p className="text-gray-600">Location data not available. Please go back and set your location.</p>
+      <div className="max-w-6xl mx-auto">
+        <div className="bg-white rounded-xl shadow-lg p-8">
+          <div className="text-center py-12">
+            <p className="text-gray-600 mb-4">Location data not available. Please go back and set your location.</p>
+            <button
+              onClick={() => window.history.back()}
+              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+            >
+              Go Back
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
+
+  const mapCenter = [appData.location.coordinates.lat, appData.location.coordinates.lng];
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -194,24 +206,23 @@ const GISMapIntegration = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Map Section */}
           <div className="lg:col-span-3">
             <div className="bg-gray-50 rounded-lg p-4 mb-4">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">Interactive Map</h3>
               
               {roofBoundary.length > 0 && (
                 <MapContainer
-                  center={[appData.location.coordinates.lat, appData.location.coordinates.lng]}
+                  center={mapCenter}
                   zoom={19}
                   scrollWheelZoom={true}
                   className="rounded-lg"
                   style={{ height: '400px', width: '100%' }}
-                  ref={mapRef}
                 >
                   <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
+                  <MapCenter center={mapCenter} />
                   <DraggablePolygon 
                     positions={roofBoundary} 
                     setPositions={setRoofBoundary} 
@@ -220,7 +231,6 @@ const GISMapIntegration = () => {
               )}
             </div>
 
-            {/* Map Controls */}
             <div className="flex flex-wrap gap-3">
               <motion.button
                 whileHover={{ scale: 1.05 }}
@@ -240,10 +250,8 @@ const GISMapIntegration = () => {
             </div>
           </div>
 
-          {/* Control Panel */}
           <div className="lg:col-span-1">
             <div className="sticky top-4 space-y-6">
-              {/* Current Measurements */}
               <div className="bg-blue-50 rounded-lg p-6">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Measurements</h3>
                 
@@ -273,7 +281,6 @@ const GISMapIntegration = () => {
                 </div>
               </div>
 
-              {/* Quick Stats */}
               <div className="bg-green-50 rounded-lg p-6">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Potential Preview</h3>
                 
@@ -296,7 +303,6 @@ const GISMapIntegration = () => {
                 </div>
               </div>
 
-              {/* Confirm Button */}
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -323,5 +329,3 @@ const GISMapIntegration = () => {
 };
 
 export default GISMapIntegration;
-
-
