@@ -41,6 +41,7 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchCommunityData = async () => {
       try {
+        const apiUrl = process.env.REACT_APP_API_URL;
         const response = await fetch(`${apiUrl}/get_weather`);
         if (!response.ok) throw new Error('Network response was not ok');
         const projects = await response.json();
@@ -110,6 +111,7 @@ const Dashboard = () => {
     };
 
     try {
+      const apiUrl = process.env.REACT_APP_API_URL;
       const response = await fetch(`${apiUrl}/get_weather`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -30,6 +30,7 @@ const LanguageSelector = () => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
+        const apiUrl = process.env.REACT_APP_API_URL;
         const response = await fetch(`${apiUrl}/get_weather`);
         const data = await response.json();
         setStats(data);
