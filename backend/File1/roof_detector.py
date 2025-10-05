@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)
+@app.route('/')
+def index():
+    return jsonify({'status': 'ok', 'message': 'HydroSense API is running!'})
 
 # --- In-memory "databases" ---
 community_projects = [
