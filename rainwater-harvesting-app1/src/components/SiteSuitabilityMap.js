@@ -29,7 +29,7 @@ const SiteSuitabilityMap = () => {
 
     const fetchSuitabilityGrid = async () => {
       try {
-        const response = await fetch(`${apiUrl}/get_weather`, {
+        const response = await fetch(`${apiUrl}/get_suitability_grid`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
