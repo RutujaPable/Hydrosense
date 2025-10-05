@@ -14,7 +14,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app)
+# Be specific about which frontend URL is allowed to access your backend
+CORS(app, resources={r"/*": {"origins": "https://hydrosense-1.netlify.app"}})
 @app.route('/')
 def index():
     return jsonify({'status': 'ok', 'message': 'HydroSense API is running!'})
