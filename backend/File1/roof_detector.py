@@ -6,10 +6,8 @@ import requests
 from PIL import Image
 from io import BytesIO
 import logging
-from skimage import measure, morphology
-from skimage.filters import threshold_otsu
 from datetime import datetime, timedelta
-import random # NEW: For data simulation
+import random
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -18,9 +16,27 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
-# --- EXISTING RoofDetector CLASS (No changes here) ---
+# --- In-memory "databases" ---
+community_projects = [
+    {"id": 1, "name": "R. Sharma", "location_name": "Koregaon Park, Pune", "lat": 18.5362, "lng": 73.8939, "water_saved": 85000, "structure_type": "Recharge Pit", "image_url": "https://i.imgur.com/S6b6gl3.jpeg"},
+    {"id": 2, "name": "A. Desai", "location_name": "Aundh, Pune", "lat": 18.5626, "lng": 73.8051, "water_saved": 120000, "structure_type": "Recharge Well", "image_url": "https://i.imgur.com/As7b21e.jpeg"},
+    {"id": 3, "name": "P. Nair", "location_name": "Hinjawadi, Pune", "lat": 18.5912, "lng": 73.7389, "water_saved": 250000, "structure_type": "Recharge Trench", "image_url": "https://i.imgur.com/S6b6gl3.jpeg"}
+]
+vendors = [
+    {"id": 1, "name": "Pune Hardware Mart", "type": "Supplier", "location": "Budhwar Peth", "lat": 18.519, "lng": 73.853, "rating": 4.5, "contact": "9876543210", "services": ["Pipes", "Cement", "Gravel"]},
+    {"id": 2, "name": "Shree Ram Construction", "type": "Contractor", "location": "Kothrud", "lat": 18.507, "lng": 73.807, "rating": 4.8, "contact": "9876543211", "services": ["Recharge Pit", "Recharge Trench"]},
+    {"id": 3, "name": "Deccan Water Solutions", "type": "Supplier", "location": "Deccan Gymkhana", "lat": 18.521, "lng": 73.841, "rating": 4.2, "contact": "9876543212", "services": ["Filters", "Geotextiles", "Pipes"]},
+    {"id": 4, "name": "AquaFlow Experts", "type": "Contractor", "location": "Viman Nagar", "lat": 18.567, "lng": 73.916, "rating": 4.9, "contact": "9876543213", "services": ["Recharge Well", "Consultancy"]},
+    {"id": 5, "name": "Builders' Depot", "type": "Supplier", "location": "Hadapsar", "lat": 18.503, "lng": 73.928, "rating": 4.4, "contact": "9876543214", "services": ["Sand", "Gravel", "Boulders"]},
+    {"id": 6, "name": "Green Earth Builders", "type": "Contractor", "location": "Baner", "lat": 18.560, "lng": 73.777, "rating": 4.7, "contact": "9876543215", "services": ["All Structures", "Landscaping"]}
+]
+subsidies = [
+    {"id": "s1", "name": "State Water Conservation Grant", "type": "percentage", "value": 0.20, "max_value": 5000, "description": "20% of project cost, up to a maximum of ₹5,000."},
+    {"id": "s2", "name": "Central Ground Water Board (CGWB) Scheme", "type": "flat", "value": 4000, "max_value": 4000, "description": "Flat ₹4,000 incentive for installing a certified recharge system."},
+    {"id": "s3", "name": "Municipal Corporation Rebate", "type": "percentage", "value": 0.15, "max_value": 3000, "description": "15% rebate on material costs, up to ₹3,000 for city residents."}
+]
+
 class RoofDetector:
-    # ... (The entire RoofDetector class code remains unchanged)
     def __init__(self):
         logger.info("RoofDetector initialized")
     
@@ -137,188 +153,112 @@ class RoofDetector:
         area_per_pixel = meters_per_pixel ** 2
         return pixels * area_per_pixel
 
-
 detector = RoofDetector()
 
 @app.route('/detect_roof', methods=['POST'])
 def detect_roof():
-    # ... (Unchanged)
     try:
         data = request.json
-        lat = float(data['lat'])
-        lng = float(data['lng'])
-        zoom = int(data.get('zoom', 19))
-        logger.info(f"Detecting roof at coordinates: {lat}, {lng}")
+        lat, lng, zoom = float(data['lat']), float(data['lng']), int(data.get('zoom', 19))
         image = detector.get_satellite_image(lat, lng, zoom)
-        roof_pixels, mask = detector.detect_roof_area(image)
+        roof_pixels, _ = detector.detect_roof_area(image)
         area_sq_m = detector.pixels_to_area(roof_pixels, zoom, lat)
-        image_area = image.shape[0] * image.shape[1]
-        coverage_ratio = roof_pixels / image_area
-        if coverage_ratio > 0.3: confidence = 'high'
-        elif coverage_ratio > 0.1: confidence = 'medium'
-        else: confidence = 'low'
-        return jsonify({
-            'success': True, 'roof_area': round(area_sq_m), 'confidence': confidence,
-            'coverage_ratio': round(coverage_ratio, 3), 'method': 'advanced_cv'
-        })
+        coverage_ratio = roof_pixels / (image.shape[0] * image.shape[1])
+        confidence = 'high' if coverage_ratio > 0.3 else 'medium' if coverage_ratio > 0.1 else 'low'
+        return jsonify({'success': True, 'roof_area': round(area_sq_m), 'confidence': confidence, 'method': 'Python Backend + OpenCV'})
     except Exception as e:
         logger.error(f"Error in roof detection: {str(e)}")
         return jsonify({'success': False, 'error': str(e), 'fallback_area': 100}), 500
 
-
 @app.route('/get_weather', methods=['POST'])
 def get_weather():
-    # ... (Unchanged)
     try:
         data = request.json
-        lat = float(data['lat'])
-        lng = float(data['lng'])
-        logger.info(f"Fetching weather data for coordinates: {lat}, {lng}")
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=365)
-        start_date_str = start_date.strftime('%Y-%m-%d')
-        end_date_str = end_date.strftime('%Y-%m-%d')
-        api_url = f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lng}&start_date={start_date_str}&end_date={end_date_str}&daily=precipitation_sum"
-        response = requests.get(api_url)
-        if response.status_code != 200:
-            raise Exception("Failed to fetch weather data from Open-Meteo")
-        weather_data = response.json()
+        lat, lng = float(data['lat']), float(data['lng'])
+        end_date, start_date = datetime.now(), datetime.now() - timedelta(days=365)
+        api_url = f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lng}&start_date={start_date.strftime('%Y-%m-%d')}&end_date={end_date.strftime('%Y-%m-%d')}&daily=precipitation_sum"
+        weather_data = requests.get(api_url).json()
         daily_rainfall = weather_data.get('daily', {}).get('precipitation_sum', [])
-        if not daily_rainfall:
-            raise Exception("No rainfall data returned from API")
         total_rainfall = sum(filter(None, daily_rainfall))
-        monthly_data = [{'month': 'Jan', 'rainfall': 0}, {'month': 'Feb', 'rainfall': 0}, {'month': 'Mar', 'rainfall': 0}, {'month': 'Apr', 'rainfall': 0}, {'month': 'May', 'rainfall': 0}, {'month': 'Jun', 'rainfall': 0}, {'month': 'Jul', 'rainfall': 0}, {'month': 'Aug', 'rainfall': 0}, {'month': 'Sep', 'rainfall': 0}, {'month': 'Oct', 'rainfall': 0}, {'month': 'Nov', 'rainfall': 0}, {'month': 'Dec', 'rainfall': 0}]
-        dates = weather_data.get('daily', {}).get('time', [])
-        for i, date_str in enumerate(dates):
-            month_index = int(date_str.split('-')[1]) - 1
+        monthly_data = [{'month': datetime(2000, i + 1, 1).strftime('%b'), 'rainfall': 0} for i in range(12)]
+        for i, date_str in enumerate(weather_data.get('daily', {}).get('time', [])):
             if daily_rainfall[i] is not None:
-                monthly_data[month_index]['rainfall'] += daily_rainfall[i]
+                monthly_data[int(date_str.split('-')[1]) - 1]['rainfall'] += daily_rainfall[i]
         rainy_days = sum(1 for day in daily_rainfall if day is not None and day > 1.0)
-        intensity = 'Medium'
-        if total_rainfall > 1200: intensity = 'High'
-        elif total_rainfall < 600: intensity = 'Low'
-        monthly_totals = [month['rainfall'] for month in monthly_data]
-        std_dev = np.std(monthly_totals)
-        reliability = max(0.6, 1 - (std_dev / np.mean(monthly_totals))) if np.mean(monthly_totals) > 0 else 0.75
-        processed_data = {
-            'annualAverage': round(total_rainfall, 2),
-            'monthlyData': [{'month': m['month'], 'rainfall': round(m['rainfall'], 2)} for m in monthly_data],
-            'rainyDays': rainy_days, 'intensity': intensity, 'reliability': round(reliability, 2)
-        }
-        return jsonify({'success': True, 'data': processed_data})
+        intensity = 'High' if total_rainfall > 1200 else 'Low' if total_rainfall < 600 else 'Medium'
+        monthly_totals = [m['rainfall'] for m in monthly_data]
+        reliability = max(0.6, 1 - (np.std(monthly_totals) / np.mean(monthly_totals))) if np.mean(monthly_totals) > 0 else 0.75
+        return jsonify({'success': True, 'data': {'annualAverage': round(total_rainfall, 2), 'monthlyData': monthly_data, 'rainyDays': rainy_days, 'intensity': intensity, 'reliability': round(reliability, 2)}})
     except Exception as e:
-        logger.error(f"Error in weather data fetching: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+def simulate_gis_data(lat, lng):
+    base_rainfall = 800 + (lat - 20) * 20
+    base_gw_depth = 15 - (lng - 75) * 2
+    return {"rainfall": random.uniform(base_rainfall - 200, base_rainfall + 200), "groundwater_depth": random.uniform(max(5, base_gw_depth - 5), base_gw_depth + 10), "permeability": random.uniform(3, 9)}
+
+@app.route('/get_suitability_grid', methods=['POST'])
+def get_suitability_grid():
+    try:
+        data = request.json
+        lat, lng = float(data['lat']), float(data['lng'])
+        grid_size, cell_size = 10, 0.001
+        features = []
+        start_lat, start_lng = lat - (grid_size / 2) * cell_size, lng - (grid_size / 2) * cell_size
+        for i in range(grid_size):
+            for j in range(grid_size):
+                min_lng, min_lat = start_lng + j * cell_size, start_lat + i * cell_size
+                max_lng, max_lat = min_lng + cell_size, min_lat + cell_size
+                gis_data = simulate_gis_data(min_lat + cell_size / 2, min_lng + cell_size / 2)
+                rainfall_norm = min(gis_data["rainfall"] / 1500, 1)
+                gw_norm = 1 - min(gis_data["groundwater_depth"] / 30, 1)
+                perm_norm = gis_data["permeability"] / 10
+                score = (rainfall_norm * 0.4) + (gw_norm * 0.3) + (perm_norm * 0.3)
+                features.append({"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[min_lng, min_lat], [max_lng, min_lat], [max_lng, max_lat], [min_lng, max_lat], [min_lng, min_lat]]]}, "properties": {"suitability_score": round(score * 10, 2), **gis_data}})
+        return jsonify({"type": "FeatureCollection", "features": features})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/health', methods=['GET'])
 def health_check():
     return jsonify({'status': 'healthy', 'service': 'roof-detector'})
 
-# --- NEW: GIS Site Suitability Endpoint ---
-def simulate_gis_data(lat, lng):
-    """Simulates GIS data layers for a given location."""
-    # Base values can be influenced by lat/lng for more realistic simulation
-    base_rainfall = 800 + (lat - 20) * 20
-    base_gw_depth = 15 - (lng - 75) * 2
-    
-    data = {
-        "rainfall": random.uniform(base_rainfall - 200, base_rainfall + 200),
-        "groundwater_depth": random.uniform(max(5, base_gw_depth - 5), base_gw_depth + 10),
-        "permeability": random.uniform(3, 9) # Score out of 10
-    }
-    return data
-
-@app.route('/get_suitability_grid', methods=['POST'])
-def get_suitability_grid():
-    """Generates a GeoJSON grid with simulated suitability scores."""
-    try:
-        data = request.json
-        lat = float(data['lat'])
-        lng = float(data['lng'])
-        
-        grid_size = 10 # 10x10 grid
-        cell_size = 0.001 # Approx 111 meters
-        
-        features = []
-        
-        start_lat = lat - (grid_size / 2) * cell_size
-        start_lng = lng - (grid_size / 2) * cell_size
-
-        for i in range(grid_size):
-            for j in range(grid_size):
-                # Calculate corners of the grid cell
-                min_lng = start_lng + j * cell_size
-                min_lat = start_lat + i * cell_size
-                max_lng = min_lng + cell_size
-                max_lat = min_lat + cell_size
-                
-                # Center of cell for simulation
-                cell_center_lat = min_lat + cell_size / 2
-                cell_center_lng = min_lng + cell_size / 2
-                
-                gis_data = simulate_gis_data(cell_center_lat, cell_center_lng)
-                
-                # Calculate suitability score (0-10)
-                # Normalize values to be between 0 and 1
-                rainfall_norm = min(gis_data["rainfall"] / 1500, 1)
-                gw_norm = 1 - min(gis_data["groundwater_depth"] / 30, 1) # Lower depth is better
-                perm_norm = gis_data["permeability"] / 10
-                
-                # Weighted average
-                score = (rainfall_norm * 0.4) + (gw_norm * 0.3) + (perm_norm * 0.3)
-                
-                features.append({
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [[
-                            [min_lng, min_lat], [max_lng, min_lat],
-                            [max_lng, max_lat], [min_lng, max_lat],
-                            [min_lng, min_lat]
-                        ]]
-                    },
-                    "properties": {
-                        "suitability_score": round(score * 10, 2),
-                        **gis_data
-                    }
-                })
-        
-        geojson = {"type": "FeatureCollection", "features": features}
-        return jsonify(geojson)
-
-    except Exception as e:
-        logger.error(f"Error in suitability grid generation: {str(e)}")
-        return jsonify({'error': str(e)}), 500
 @app.route('/get_community_projects', methods=['GET'])
 def get_community_projects():
-    """Returns the list of community projects."""
     return jsonify(community_projects)
 
 @app.route('/add_community_project', methods=['POST'])
 def add_community_project():
-    """Adds a new project to the community list."""
     data = request.json
-    
-    # Basic validation
     if not all(k in data for k in ['name', 'location_name', 'water_saved', 'structure_type']):
         return jsonify({'success': False, 'error': 'Missing required fields'}), 400
-        
-    new_project = {
-        "id": len(community_projects) + 1,
-        "name": data['name'],
-        "location_name": data['location_name'],
-        "lat": data.get('lat'),
-        "lng": data.get('lng'),
-        "water_saved": int(data['water_saved']),
-        "structure_type": data['structure_type'],
-        "image_url": "https://i.imgur.com/As7b21e.jpeg" # Default image for new submissions
-    }
-    
+    new_project = {"id": len(community_projects) + 1, "name": data['name'], "location_name": data['location_name'], "lat": data.get('lat'), "lng": data.get('lng'), "water_saved": int(data['water_saved']), "structure_type": data['structure_type'], "image_url": "https://i.imgur.com/As7b21e.jpeg"}
     community_projects.append(new_project)
     logger.info(f"Added new community project for {new_project['name']}")
     return jsonify({'success': True, 'project': new_project}), 201
 
-# --- END NEW SECTION ---
+@app.route('/get_vendors', methods=['GET'])
+def get_vendors():
+    return jsonify(vendors)
+
+@app.route('/get_subsidies', methods=['GET'])
+def get_subsidies():
+    return jsonify(subsidies)
+
+@app.route('/get_app_stats', methods=['GET'])
+def get_app_stats():
+    try:
+        assessments_completed = len(community_projects)
+        liters_saved_annually = sum(p['water_saved'] for p in community_projects)
+        water_cost_per_liter = 0.05
+        total_monetary_savings = liters_saved_annually * water_cost_per_liter
+        average_annual_savings = (total_monetary_savings / assessments_completed) if assessments_completed > 0 else 0
+        stats = {"assessmentsCompleted": assessments_completed, "litersSavedAnnually": liters_saved_annually, "averageAnnualSavings": round(average_annual_savings)}
+        return jsonify(stats)
+    except Exception as e:
+        logger.error(f"Error in app stats generation: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     logger.info("Starting Roof Detection Backend Server...")
-    app.run(host='0.0.0.0', {process.env.REACT_APP_API_URL}, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
