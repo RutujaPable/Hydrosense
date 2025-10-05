@@ -42,7 +42,7 @@ const Dashboard = () => {
     const fetchCommunityData = async () => {
       try {
         const apiUrl = process.env.REACT_APP_API_URL;
-        const response = await fetch(`${apiUrl}/get_weather`);
+        const response = await fetch(`${apiUrl}/get_community_projects`);
         if (!response.ok) throw new Error('Network response was not ok');
         const projects = await response.json();
         const totalWaterSaved = projects.reduce((sum, project) => sum + project.water_saved, 0);

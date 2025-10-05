@@ -30,10 +30,10 @@ const LanguageSelector = () => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const apiUrl = process.env.REACT_APP_API_URL;
-        const response = await fetch(`${apiUrl}/get_weather`);
-        const data = await response.json();
-        setStats(data);
+            const response = await fetch(`${apiUrl}/get_app_stats`);
+            if (!response.ok) throw new Error('Failed to fetch stats');
+            const data = await response.json();
+            setStats(data);
       } catch (error) {
         console.error("Failed to fetch app stats:", error);
         // Fallback to placeholder stats if backend is down

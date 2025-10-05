@@ -29,7 +29,6 @@ const SiteSuitabilityMap = () => {
 
     const fetchSuitabilityGrid = async () => {
       try {
-        const apiUrl = process.env.REACT_APP_API_URL;
         const response = await fetch(`${apiUrl}/get_weather`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
