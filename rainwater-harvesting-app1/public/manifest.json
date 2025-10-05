@@ -1,0 +1,8 @@
+{
+  "short_name": "HydroSense",
+  "name": "HydroSense Rainwater Harvesting",
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#ffffff"
+}
